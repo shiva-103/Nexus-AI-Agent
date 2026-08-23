@@ -1,0 +1,15 @@
+[theme]
+primaryColor = "#0d7c78"
+backgroundColor = "#f7f9f8"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#172331"
+font = "sans serif"
+
+[client]
+showErrorDetails = false
+maxMessageSize = 200
+
+[server]
+port = 8501
+headless = true
+runOnSave = true

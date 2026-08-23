@@ -4,6 +4,8 @@ import requests
 import streamlit as st
 from dotenv import load_dotenv
 
+# Load environment variables for local development
+# Streamlit Cloud uses .streamlit/secrets.toml instead
 load_dotenv()
 
 from agent.orchestrator import analyze_file, add_duplicate_escalations, timestamp
@@ -12,7 +14,14 @@ from schemas.employee import TARGET_SCHEMA
 
 st.set_page_config(page_title="NEXUS", page_icon="🔄", layout="wide")
 
-DEFAULT_API = os.getenv("TARGET_API_URL", "http://localhost:8099")
+# Support both local .env and Streamlit Cloud secrets
+def get_env(key, default=None):
+    """Get environment variable from secrets (Streamlit Cloud) or .env (local)"""
+    if key in st.secrets:
+        return st.secrets[key]
+    return os.getenv(key, default)
+
+DEFAULT_API = get_env("TARGET_API_URL", "http://localhost:8099")
 
 st.markdown(
     """
@@ -301,7 +310,7 @@ with st.sidebar:
         help="Mappings below this confidence are sent to human review.",
     )
     st.caption(f"Mappings below {confidence_threshold:.0%} require review")
-    st.caption(f"Model: {os.getenv('GROQ_MODEL', 'openai/gpt-oss-20b')}")
+    st.caption(f"Model: {get_env('GROQ_MODEL', 'openai/gpt-oss-20b')}")
     with st.expander("Rules"):
         st.caption("Target-schema validation rules")
         ruleset = [
@@ -326,6 +335,32 @@ with st.sidebar:
     st.write("**Autonomy policy**")
     st.write("🟢 High-confidence + low-risk → automatic")
     st.write("🟡 Ambiguous/high-impact → human review")
+    st.divider()
+    
+    with st.expander("ℹ️ Target API Configuration"):
+        st.markdown("""
+        **What is the Target API?**
+        
+        The Target API is where NEXUS pushes cleaned and validated employee records.
+        
+        **For Streamlit Cloud:**
+        - Must be a publicly accessible URL (HTTPS preferred)
+        - Examples:
+          - `https://hr-api.company.com/employees`
+          - `https://api.workday.com/v1/employees`
+          - Your production/staging HR system endpoint
+        
+        **For Local Development:**
+        - Can be `http://localhost:8099` (mock API)
+        - Or a remote API URL
+        
+        **Important:**
+        - Streamlit Cloud cannot reach `localhost` APIs
+        - Use remote API URL or deploy your API alongside NEXUS
+        - API must accept POST requests to create records
+        - Configure via `.streamlit/secrets.toml` on Streamlit Cloud
+        """)
+    
     st.divider()
     if st.button("Reset migration"):
         reset_migration()
@@ -590,6 +625,29 @@ with sections[2]:
 
 with sections[3]:
     st.subheader("🚀 Push to Target")
+    
+    # API URL input with validation help
+    api_url = st.text_input(
+        "Target API URL",
+        value=DEFAULT_API,
+        placeholder="https://your-api.com/employees or http://localhost:8099"
+    )
+    
+    # Validate API URL format
+    if api_url and not api_url.startswith(("http://", "https://")):
+        st.error("❌ API URL must start with http:// or https://")
+        api_url = None
+    
+    # Check if API is reachable
+    if api_url and st.button("🔍 Test API Connection"):
+        try:
+            response = requests.head(api_url, timeout=5)
+            st.success(f"✅ API is reachable (HTTP {response.status_code})")
+        except requests.exceptions.ConnectionError:
+            st.error(f"❌ Cannot reach API at {api_url}")
+            st.info("**For Streamlit Cloud:** Ensure your API is publicly accessible (not localhost)")
+        except Exception as exc:
+            st.warning(f"⚠️ Connection check failed: {exc}")
 
     for item in M["records"]:
         if item["status"] != "rejected":
@@ -634,15 +692,13 @@ with sections[3]:
     c3.metric("Review", len(actionable_escalations))
     c4.metric("Rejected", rejected)
 
-    api_url = st.text_input("Target API", DEFAULT_API)
-
     if actionable_escalations:
         st.info("Resolve all escalations before pushing to the target.")
     else:
         if st.button(
             "📤 Push Ready Records",
             type="primary",
-            disabled=not pre_push_ready,
+            disabled=not pre_push_ready or not api_url,
         ):
             progress = st.progress(0)
             for n, item in enumerate(valid, start=1):
