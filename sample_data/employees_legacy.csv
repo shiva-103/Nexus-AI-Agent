@@ -1,0 +1,4 @@
+emp_id,employee_name,mail,dob,department
+E101,Rahul Sharma,RAHUL@GMAIL.COM,12/05/1995,Engineering
+E102,Priya Das,priya@gmail.com,21/06/1997,Finance
+E999,Test Failure,test@example.com,1990-01-01,Engineering
