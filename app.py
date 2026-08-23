@@ -17,8 +17,15 @@ st.set_page_config(page_title="NEXUS", page_icon="🔄", layout="wide")
 # Support both local .env and Streamlit Cloud secrets
 def get_env(key, default=None):
     """Get environment variable from secrets (Streamlit Cloud) or .env (local)"""
-    if key in st.secrets:
-        return st.secrets[key]
+    try:
+        # Try to get from Streamlit secrets (Streamlit Cloud)
+        if key in st.secrets:
+            return st.secrets[key]
+    except (FileNotFoundError, KeyError):
+        # Secrets file doesn't exist or key not found (local development)
+        pass
+    
+    # Fall back to .env file (local development)
     return os.getenv(key, default)
 
 DEFAULT_API = get_env("TARGET_API_URL", "http://localhost:8099")
